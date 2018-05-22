@@ -7,7 +7,7 @@
   // const int charSize = 4;
   
   // timing variables
-  const int frameTime = 2000;
+  const int frameTime = 500;
   //const int stepTime = 250;  
   //const int halfStep = stepTime / 2;
   //const int doubleStep = stepTime * 2;
@@ -209,16 +209,31 @@
     {1,1,1,1}
   };
 
-void setup()
-{
+void setup() {
   setupPhysicalDisplay();
 
   clearTextBuffer();
   
   // string to write
-  String marqueeText = String("abcd");
+  String marqueeText = "haye en silje";
   buildMarqueeText(marqueeText);
+  
+  marqueeFinger = textBuffer[0];
 }
+
+void loop() {
+  loadFrameFromTextBuffer(marqueeFinger);
+  render();
+  marqueeFinger++;
+
+  // reset the finger when at the end of the text
+  if(marqueeFinger==bufferEndFinger)
+    marqueeFinger = textBuffer[0];
+}
+
+/***********
+  Setup functions
+************/
 
 void setupPhysicalDisplay() {
   for(int i = 0; i<16; i++) {
@@ -232,16 +247,9 @@ void setupPhysicalDisplay() {
   turnEverythingOff();
 }
 
-void loop()
-{
-  loadFrameFromTextBuffer(marqueeFinger);
-  render();
-  marqueeFinger += charSize;
-
-  //reset the finger when at the end of the text
-  if(marqueeFinger==bufferEndFinger)
-    marqueeFinger = textBuffer[0];
-}
+/***********
+  Rendering
+************/
 
 void render() {
   for(int t = frameTime; t>0; t--) {  // for the duration of a frame
@@ -273,19 +281,21 @@ void fillBufferWithFrame(const int frame[charSize][charSize]){
 void loadFrameFromTextBuffer(bool* finger) {
   for(int row = 0; row < charSize; row++) {
     for(int col = 0; col < charSize; col++) {
-      displayBuffer[row][col] = (bool) finger + (row * charSize) + col;
-      //displayBuffer[row][col] = textBuffer[row][col + finger];
+      displayBuffer[row][col] = (bool) *(finger + (row * maxBufferLength) + col);
     }
   }
 }
 
-bool* clearTextBuffer() {
+/***********
+  Managing textBuffer functions
+************/
+
+void clearTextBuffer() {
   for(int row = 0; row < charSize; row++) {
     for(int col = 0; col < maxBufferLength; col++) {
       textBuffer[row][col] = 0;
     }
   }
-  return textBuffer[0];
 }
 
 const bool* getMapForChar(char c) {
@@ -376,48 +386,54 @@ const bool* getMapForChar(char c) {
 void copyCharmap(const bool* frame, bool* pos) {
   for(int row = 0; row < charSize; row++) {
     for(int col = 0; col < charSize; col++) {
-      bool val = (bool) frame + (row * charSize) + col;
-      *pos = val;
-      pos += 1;
+      bool val = (bool) *(frame + (row * charSize) + col);
+      *(pos + (row * maxBufferLength) + col) = val;
     }
   }
 }
 
 void buildMarqueeText(String text) {
-  actualTextLength = sizeof(text)-1;
+  actualTextLength = text.length();
   actualBufferLength = calculateBufferLength(actualTextLength);
-  bufferEndFinger = textBuffer[0] + (actualBufferLength - (4*charSize));
+  bufferEndFinger = textBuffer[0] + (actualBufferLength - charSize); // size of intentionally filled columns in buffer, minus trailing spaces for correct finger position
   
   if(actualTextLength > maxTextLength) {
     text = "input too long";
-    actualTextLength = sizeof(text)-1;
+    actualTextLength = text.length();
     actualBufferLength = calculateBufferLength(actualTextLength);
-    bufferEndFinger = textBuffer[0] + (actualBufferLength - (4*charSize));
+    bufferEndFinger = textBuffer[0] + (actualBufferLength - charSize);
   }
   
   bool* finger = textBuffer[0];
   
   // start with four spaces have the text move in: advance pointer
-  finger += (4 * charSize);
+  finger += charSize;
   
   for(int i = 0; i < actualTextLength; i++) { // for each char in the text to display
     char c = text[i];
-    const bool* charmap = getMapForChar(c);
+    if(c == ' ')
+      finger += 1; // a space is 2 empty columns... TODO: should be part of the charmaps, but not with such a huge gap (5 columns, due to 'monospacing')
+    else {
+      const bool* charmap = getMapForChar(c);
+      // write the char to the textBuffer
+      copyCharmap(charmap, finger);
+      finger += charSize; // advance pointer to after the char
     
-    // write the char to the textBuffer
-    copyCharmap(charmap, finger);
-    finger += (charSize * charSize); // advance pointer
-  
-    // write a space after the character to the textBuffer
-    finger += (charSize);
+      // write a space after the character to the textBuffer
+      finger += 1;
+    }
   }
   // finish with 3 more spaces to have the text move out.
-  finger += (3 * charSize);
+  finger += 3;
 }
 
 int calculateBufferLength(int len) {
   return ((len+2)*charSize)+(len-1); // 4 columns per char, 4 on the head, 4 on the tail, n-1 spaces between chars.
 }
+
+/***********
+  Display management
+************/
 
 //turn all off
 void turnEverythingOff() {
